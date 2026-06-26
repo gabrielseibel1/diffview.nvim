@@ -17,6 +17,7 @@ local lazy = require("diffview.lazy")
 local Session = lazy.access("diffview.review.session", "Session") ---@type ReviewSession|LazyModule
 local actions = lazy.require("diffview.review.actions") ---@module "diffview.review.actions"
 local logger = lazy.access(_G, { "DiffviewGlobal", "logger" }) ---@type Logger
+local markers = lazy.require("diffview.review.markers") ---@module "diffview.review.markers"
 
 local M = {}
 
@@ -46,27 +47,94 @@ function M.unregister_session(view)
   end
 end
 
+---Refresh the file-panel status bar (winbar) for the given view.
+---Filled in proper in `ui/file_panel_patch.lua`; this is the seam.
+---@param view DiffView
+function M.refresh_statusbar(view)
+  local patch = require("diffview.review.ui.file_panel_patch")
+  patch.refresh_statusbar(view)
+end
+
+-- ───── lifecycle listeners ────────────────────────────────────────────
+
+---@param view DiffView?
+local function on_view_opened(view)
+  if not view then return end
+  -- Auto-attach if config requests it.
+  local cfg = require("diffview.config").get_config().review or {}
+  if cfg.auto_attach then
+    -- Defer so the view finishes layout before we touch its panel.
+    vim.schedule(function()
+      if M.session_for(view) then return end
+      -- Reuse the same code path as the user command.
+      vim.api.nvim_set_current_tabpage(view.tabpage)
+      actions.start()
+    end)
+  end
+end
+
+---@param view DiffView?
+local function on_view_closed(view)
+  if not view then return end
+  local session = M.session_for(view)
+  if not session then return end
+  if session.copy_only then
+    M.unregister_session(view)
+    return
+  end
+  if session.dirty then
+    -- A debounced save may still be in flight; flush it now.
+    session:save()
+  end
+  M.unregister_session(view)
+end
+
+---Hook for when a file is displayed (cursor swaps to a new diff buffer).
+---@param view DiffView?
+local function on_file_displayed(view)
+  if not view then return end
+  local session = M.session_for(view)
+  if not session then return end
+  markers.redraw_for_view(view, session)
+end
+
+-- ───── setup ──────────────────────────────────────────────────────────
+
 ---Idempotent setup hook. Called from `diffview.config.setup` so review
 ---listeners attach exactly once per nvim session.
 function M.setup()
   if did_setup then return end
   did_setup = true
 
-  -- Hooks for view lifecycle, comment-marker redraw, and on-close prompt
-  -- get attached here in later tasks. For now this is a no-op so the
-  -- module is safe to require everywhere.
-  logger:lvl(5):debug("[review] setup called")
-end
+  local g = DiffviewGlobal.emitter
 
----Refresh the file-panel status bar (winbar) for the given view. Filled
----in by task #9; safe no-op before then.
----@param view DiffView
----@diagnostic disable-next-line: unused-local
-function M.refresh_statusbar(view)
-  -- task #9
+  g:on("view_opened", function(_, view) on_view_opened(view) end)
+  g:on("view_closed", function(_, view) on_view_closed(view) end)
+  -- `diff_buf_win_enter` fires every time a file is shown in a layout
+  -- window. We don't get the view directly from the global emit, so we
+  -- look it up via `lib.get_current_view`.
+  g:on("diff_buf_win_enter", function()
+    on_file_displayed(require("diffview.lib").get_current_view() --[[@as DiffView]])
+  end)
+
+  -- file_open_post is a per-view event, but at setup time the views
+  -- don't exist yet. We hook it lazily inside on_view_opened.
+  g:on("view_opened", function(_, view)
+    if not view or not view.emitter then return end
+    view.emitter:on("file_open_post", function()
+      on_file_displayed(view)
+    end)
+    view.emitter:on("files_updated", function()
+      local s = M.session_for(view)
+      if s then s.total_files = view.files:len(); M.refresh_statusbar(view) end
+    end)
+  end)
+
+  logger:lvl(5):debug("[review] setup complete; listeners attached")
 end
 
 M.actions = actions
 M.Session = Session
+M.markers = markers
 
 return M
