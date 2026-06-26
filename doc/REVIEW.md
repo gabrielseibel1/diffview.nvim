@@ -14,19 +14,24 @@ a single GitHub review — or yank the whole thing as markdown.
 
 `DiffviewReviewStart` auto-detects the PR via `gh pr list --head <branch>`
 and falls back to the head SHA. If no PR is found you still get a
-**copy-only** session — you can build the review locally and yank it.
+**copy-only** session — you can build the review locally and yank it
+with `<leader>jy`.
 
 ## Default bindings
+
+All review bindings use the `<leader>j` prefix to stay out of common
+`<leader>c…` / `<leader>r…` namespaces that LSP and code-action plugins
+often claim.
 
 In a diff buffer or the file panel:
 
 | Key           | Action                                          |
 |---------------|-------------------------------------------------|
-| `<leader>cc`  | Comment on current line (works in visual range) |
-| `<leader>cC`  | Comment on the current file (subject = file)    |
-| `<leader>rl`  | Open the pending-comments list                  |
-| `<leader>rs`  | Open the submit form                            |
-| `<leader>ry`  | Yank the review to clipboard                    |
+| `<leader>jc`  | Comment on current line (works in visual range) |
+| `<leader>jC`  | Comment on the current file (subject = file)    |
+| `<leader>jl`  | Open the pending-comments list                  |
+| `<leader>js`  | Open the submit form                            |
+| `<leader>jy`  | Yank the review to clipboard                    |
 
 File panel only:
 
@@ -34,7 +39,7 @@ File panel only:
 |---------------|-------------------------------------------------|
 | `c`           | Comment on the file under the cursor            |
 | `C`           | File-subject comment on the file under cursor   |
-| `<leader>R`   | Toggle the `[x] / [ ]` reviewed checkbox        |
+| `<leader>jR`  | Toggle the `[x] / [ ]` reviewed checkbox        |
 
 Inside the inline comment editor:
 
