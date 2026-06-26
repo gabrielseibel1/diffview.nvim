@@ -106,6 +106,9 @@ function M.setup()
   if did_setup then return end
   did_setup = true
 
+  -- Install the file-panel decorator hooks before any panel renders.
+  require("diffview.review.ui.file_panel_patch").install()
+
   local g = DiffviewGlobal.emitter
 
   g:on("view_opened", function(_, view) on_view_opened(view) end)

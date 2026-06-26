@@ -4,12 +4,33 @@ local utils = require("diffview.utils")
 
 local pl = utils.path
 
+local M = {}
+
+---Optional decorator called at the start of every file row. The hook
+---may prepend extra text (e.g. a "[x] " reviewed checkbox) to the row
+---and return how many columns it consumed (for indent alignment).
+---Set/cleared by `diffview.review` at runtime; nil here so the core
+---behavior is unchanged.
+---@type fun(comp: RenderComponent, file: FileEntry, panel: FilePanel)?
+M.file_row_prefix = nil
+
+---Optional decorator called after every panel render finishes. Receives
+---the panel so the implementation can read panel-level state (file
+---counts, etc.) and apply UI tweaks like setting `winbar`.
+---@type fun(panel: FilePanel)?
+M.post_panel_render = nil
+
 ---@param comp  RenderComponent
 ---@param show_path boolean
 ---@param depth integer|nil
-local function render_file(comp, show_path, depth)
+---@param panel? FilePanel
+local function render_file(comp, show_path, depth, panel)
   ---@type FileEntry
   local file = comp.context
+
+  if M.file_row_prefix and panel then
+    M.file_row_prefix(comp, file, panel)
+  end
 
   comp:add_text(file.status .. " ", hl.get_git_hl(file.status))
 
@@ -47,9 +68,10 @@ local function render_file(comp, show_path, depth)
 end
 
 ---@param comp RenderComponent
-local function render_file_list(comp)
+---@param panel? FilePanel
+local function render_file_list(comp, panel)
   for _, file_comp in ipairs(comp.components) do
-    render_file(file_comp, true)
+    render_file(file_comp, true, nil, panel)
   end
 end
 
@@ -68,11 +90,12 @@ end
 
 ---@param depth integer
 ---@param comp RenderComponent
-local function render_file_tree_recurse(depth, comp)
+---@param panel? FilePanel
+local function render_file_tree_recurse(depth, comp, panel)
   local conf = config.get_config()
 
   if comp.name == "file" then
-    render_file(comp, false, depth)
+    render_file(comp, false, depth, panel)
     return
   end
 
@@ -109,29 +132,31 @@ local function render_file_tree_recurse(depth, comp)
 
   if not ctx.collapsed then
     for _, item in ipairs(items.components) do
-      render_file_tree_recurse(depth + 1, item)
+      render_file_tree_recurse(depth + 1, item, panel)
     end
   end
 end
 
 ---@param comp RenderComponent
-local function render_file_tree(comp)
+---@param panel? FilePanel
+local function render_file_tree(comp, panel)
   for _, c in ipairs(comp.components) do
-    render_file_tree_recurse(0, c)
+    render_file_tree_recurse(0, c, panel)
   end
 end
 
 ---@param listing_style "list"|"tree"
 ---@param comp RenderComponent
-local function render_files(listing_style, comp)
+---@param panel? FilePanel
+local function render_files(listing_style, comp, panel)
   if listing_style == "list" then
-    return render_file_list(comp)
+    return render_file_list(comp, panel)
   end
-  render_file_tree(comp)
+  render_file_tree(comp, panel)
 end
 
 ---@param panel FilePanel
-return function(panel)
+local function render_panel(panel)
   if not panel.render_data then
     return
   end
@@ -159,7 +184,7 @@ return function(panel)
     comp:add_text("(" .. #panel.files.conflicting .. ")", "DiffviewFilePanelCounter")
     comp:ln()
 
-    render_files(panel.listing_style, panel.components.conflicting.files.comp)
+    render_files(panel.listing_style, panel.components.conflicting.files.comp, panel)
     panel.components.conflicting.margin.comp:add_line()
   end
 
@@ -173,7 +198,7 @@ return function(panel)
     comp:add_text("(" .. #panel.files.working .. ")", "DiffviewFilePanelCounter")
     comp:ln()
 
-    render_files(panel.listing_style, panel.components.working.files.comp)
+    render_files(panel.listing_style, panel.components.working.files.comp, panel)
     panel.components.working.margin.comp:add_line()
   end
 
@@ -183,7 +208,7 @@ return function(panel)
     comp:add_text("(" .. #panel.files.staged .. ")", "DiffviewFilePanelCounter")
     comp:ln()
 
-    render_files(panel.listing_style, panel.components.staged.files.comp)
+    render_files(panel.listing_style, panel.components.staged.files.comp, panel)
     panel.components.staged.margin.comp:add_line()
   end
 
@@ -201,4 +226,14 @@ return function(panel)
       comp:add_line(pl:truncate(relpath, width - 5), "DiffviewFilePanelPath")
     end
   end
+
+  if M.post_panel_render then
+    M.post_panel_render(panel)
+  end
 end
+
+-- Preserve the historical "module is the render function" API so
+-- `require("diffview.scene.views.diff.render")(panel)` keeps working.
+return setmetatable(M, {
+  __call = function(_, panel) render_panel(panel) end,
+})
