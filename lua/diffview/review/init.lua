@@ -58,6 +58,14 @@ function M.setup()
   logger:lvl(5):debug("[review] setup called")
 end
 
+---Refresh the file-panel status bar (winbar) for the given view. Filled
+---in by task #9; safe no-op before then.
+---@param view DiffView
+---@diagnostic disable-next-line: unused-local
+function M.refresh_statusbar(view)
+  -- task #9
+end
+
 M.actions = actions
 M.Session = Session
 

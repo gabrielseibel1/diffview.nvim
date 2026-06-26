@@ -28,4 +28,14 @@ function M.open(session, location, opts)
   return nil
 end
 
+---Save the active editor's content as a comment on the bound session.
+function M.save()
+  utils.warn("[review] comment editor save is not yet implemented (task #7)")
+end
+
+---Discard the active editor without saving.
+function M.cancel()
+  utils.warn("[review] comment editor cancel is not yet implemented (task #7)")
+end
+
 return M
