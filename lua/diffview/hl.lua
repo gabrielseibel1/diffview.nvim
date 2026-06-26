@@ -466,6 +466,10 @@ M.hl_links = {
   DiffDelete = "DiffDelete",
   DiffChange = "DiffChange",
   DiffText = "DiffText",
+  ReviewReviewed = "DiffviewStatusAdded",
+  ReviewPending = "Comment",
+  ReviewMark = "DiagnosticInfo",
+  ReviewMarkPreview = "Comment",
 }
 
 function M.update_diff_hl()
