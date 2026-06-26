@@ -61,7 +61,7 @@ local function render(st)
   st.ids = {}
   local lines = {}
   if #st.session.comments == 0 then
-    table.insert(lines, "  (no pending comments — add some with <leader>cc)")
+    table.insert(lines, "  (no pending comments — add some with <leader>jc)")
   else
     table.insert(lines, (" %s  │ %d pending comments"):format(
       st.session:short_id(), #st.session.comments))
