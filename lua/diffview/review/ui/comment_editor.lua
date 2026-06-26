@@ -140,9 +140,12 @@ function M.open(session, location, opts)
   end
 
   local parent_win = api.nvim_get_current_win()
-  local buf = api.nvim_create_buf(false, true)  -- nofile, no listing
+  local buf = api.nvim_create_buf(false, true)
   api.nvim_buf_set_name(buf, ("diffview://review/comment/%d"):format(buf))
-  vim.bo[buf].buftype   = "nofile"
+  -- `acwrite` is the magic buftype that routes `:w` through BufWriteCmd
+  -- (without ever touching the filesystem) and lets `:q` close a
+  -- "modified" buffer when we hijack QuitPre below.
+  vim.bo[buf].buftype   = "acwrite"
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].swapfile  = false
   vim.bo[buf].modifiable = true
@@ -158,11 +161,19 @@ function M.open(session, location, opts)
     end
   end
   api.nvim_buf_set_lines(buf, 0, -1, false, initial)
+  -- Mark unmodified so `:q` (and `:wq`) won't be blocked by E37 before
+  -- the user has typed anything of their own.
+  vim.bo[buf].modified = false
 
   local win_cfg = float_config_for(parent_win, #initial)
   local win = api.nvim_open_win(buf, true, win_cfg)
-  -- Put the cursor on the first body line (skipping the header).
+  -- Put the cursor on the first body line (skipping the header) and
+  -- drop straight into insert mode at the end of that line so the user
+  -- can start typing immediately. `startinsert!` puts the cursor after
+  -- the line's last char (equivalent to `A`), which on the empty body
+  -- line is column 0 — exactly where we want it.
   pcall(api.nvim_win_set_cursor, win, { math.min(2, #initial), 0 })
+  vim.cmd("startinsert!")
 
   install_keymaps(buf)
 
@@ -182,6 +193,25 @@ function M.open(session, location, opts)
   api.nvim_create_autocmd("WinClosed", {
     group = aug, pattern = tostring(win),
     callback = function() vim.schedule(close_active) end,
+  })
+
+  -- Make `:w` / `:write` save the comment (same as <C-s>). The buffer is
+  -- `buftype=acwrite` so the default `:w` is routed through this
+  -- autocmd instead of trying to touch the filesystem.
+  api.nvim_create_autocmd("BufWriteCmd", {
+    group = aug, buffer = buf,
+    callback = function() M.save() end,
+  })
+  -- `:q` / `:quit` cancels the comment. We hijack QuitPre so a buffer
+  -- the user has typed in (`modified = true`) closes cleanly without
+  -- `E37: No write since last change`. The actual teardown happens via
+  -- the WinClosed autocmd above once vim completes the quit.
+  api.nvim_create_autocmd("QuitPre", {
+    group = aug, buffer = buf,
+    callback = function()
+      if not (active and active.buf == buf) then return end
+      pcall(function() vim.bo[buf].modified = false end)
+    end,
   })
 
   active = {
@@ -213,6 +243,11 @@ function M.save()
   if body == "" then
     utils.warn("[review] empty comment — not saved (use q to cancel without saving)")
     return
+  end
+  -- Drop out of insert mode before tearing down the float so the user
+  -- lands in normal mode on the diff buffer.
+  if api.nvim_get_mode().mode:sub(1, 1) == "i" then
+    vim.cmd("stopinsert")
   end
   local existing = st.opts.existing_comment
   if existing then
@@ -253,6 +288,9 @@ end
 ---Discard the active editor.
 function M.cancel()
   if not active then return end
+  if api.nvim_get_mode().mode:sub(1, 1) == "i" then
+    vim.cmd("stopinsert")
+  end
   close_active()
 end
 

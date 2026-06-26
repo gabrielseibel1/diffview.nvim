@@ -43,10 +43,14 @@ File panel only:
 
 Inside the inline comment editor:
 
-| Key           | Action                                          |
-|---------------|-------------------------------------------------|
-| `<C-s>`       | Save the comment and close the editor           |
-| `q`, `<C-c>`  | Discard the comment and close the editor        |
+| Key / cmd       | Action                                                |
+|-----------------|-------------------------------------------------------|
+| —               | Opens in insert mode at the body line                 |
+| `<C-s>`         | Save the comment and close (works in normal & insert) |
+| `:w`, `:write`  | Same as `<C-s>` — save and close                      |
+| `q`, `<C-c>`    | Discard the comment and close                         |
+| `:q`, `:quit`   | Same as `q` — discard and close (no `E37` block)      |
+| `:wq`           | Save and close                                        |
 
 ## Commands
 
