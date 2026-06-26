@@ -1,19 +1,28 @@
---- Post-copy dialog: after `actions.copy_review` yanks the markdown to the
---- system clipboard, ask the user whether to finish the session or keep
---- going. Backed by `vim.ui.select` (no custom Panel needed).
+--- Post-copy dialog.
 ---
---- Implemented in task #10.
-
-local lazy = require("diffview.lazy")
-local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
+--- Asks the user whether to finish the session after a successful clipboard
+--- yank. Implemented via `vim.ui.select` for portability — no custom Panel
+--- needed; whatever ui-select provider the user has (default, dressing,
+--- snacks, telescope-ui-select, etc.) will pick it up.
 
 local M = {}
 
 ---@param session ReviewSession
----@param on_finish fun()
----@diagnostic disable-next-line: unused-local
+---@param on_finish fun()  -- called when the user picks "Finish session"
 function M.open(session, on_finish)
-  utils.warn("[review] copy form is not yet implemented (task #10)")
+  -- `session` is unused for now; reserved for future "summary" rendering.
+  vim.ui.select(
+    { "Keep working", "Finish session" },
+    {
+      prompt = ("Review copied (%d comments). Finish this session?"):format(#session.comments),
+      kind = "diffview.review.copy",
+    },
+    function(choice)
+      if choice == "Finish session" and on_finish then
+        on_finish()
+      end
+    end
+  )
 end
 
 return M
