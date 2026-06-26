@@ -78,4 +78,16 @@ function M.copy_review()
   nyi("copy_review")
 end
 
+---Save the active inline comment editor and persist the comment.
+---Bound to `<C-s>` in the editor's `review` keymap section.
+function M.editor_save()
+  nyi("editor_save")
+end
+
+---Discard the active inline comment editor without saving.
+---Bound to `q`/`<C-c>` in the editor's `review` keymap section.
+function M.editor_cancel()
+  nyi("editor_cancel")
+end
+
 return M
