@@ -306,12 +306,9 @@ function M.copy_review()
   local view = require_view(); if not view then return end
   local session = require_session(view); if not session then return end
   local text = format.render(session, { event = "COMMENT" })
-  -- Prefer the system clipboard; fall back to the unnamed register.
-  local has_clip = vim.fn.has("clipboard") == 1
-  vim.fn.setreg(has_clip and "+" or '"', text)
+  local reg = format.yank(text)
   DiffviewGlobal.emitter:emit("review_copied", session)
-  utils.info(("[review] copied %d-byte review to %s register"):format(
-    #text, has_clip and "+" or '"'))
+  utils.info(("[review] copied %d-byte review to %s register"):format(#text, reg))
   copy_form.open(session, function() M.close_session() end)
 end
 
