@@ -55,3 +55,33 @@ command("DiffviewLog", function()
     vim.fn.fnameescape(DiffviewGlobal.logger.outfile)
   ))
 end, { nargs = 0, bang = true })
+
+command("DiffviewReviewStart", function(ctx)
+  -- ctx.args is a single token or empty. Pass `nil` for autodetect and
+  -- the parsed integer otherwise.
+  local pr = nil
+  local arg = ctx.args and ctx.args:match("^%s*(.-)%s*$")
+  if arg and arg ~= "" then
+    pr = tonumber(arg)
+    if not pr then
+      vim.notify(
+        ("[diffview.review] invalid PR number: %s"):format(arg),
+        vim.log.levels.ERROR
+      )
+      return
+    end
+  end
+  require("diffview.review.actions").start(pr)
+end, { nargs = "?", bang = true, desc = "Start a review session on the current DiffView" })
+
+command("DiffviewReviewSubmit", function()
+  require("diffview.review.actions").submit_review()
+end, { nargs = 0, bang = true, desc = "Open the review submit form" })
+
+command("DiffviewReviewCopy", function()
+  require("diffview.review.actions").copy_review()
+end, { nargs = 0, bang = true, desc = "Yank the current review to the clipboard" })
+
+command("DiffviewReviewList", function()
+  require("diffview.review.actions").list_comments()
+end, { nargs = 0, bang = true, desc = "Open the pending review comments list" })

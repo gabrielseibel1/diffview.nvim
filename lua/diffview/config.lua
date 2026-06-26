@@ -15,6 +15,7 @@ local Diff3Mixed = lazy.access("diffview.scene.layouts.diff_3_mixed", "Diff3Mixe
 local Diff3Ver = lazy.access("diffview.scene.layouts.diff_3_ver", "Diff3Ver") ---@type Diff3Hor|LazyModule
 local Diff4 = lazy.access("diffview.scene.layouts.diff_4", "Diff4") ---@type Diff4|LazyModule
 local Diff4Mixed = lazy.access("diffview.scene.layouts.diff_4_mixed", "Diff4Mixed") ---@type Diff4Mixed|LazyModule
+local review_actions = lazy.require("diffview.review.actions") ---@module "diffview.review.actions"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local M = {}
@@ -111,6 +112,31 @@ M.defaults = {
       win_opts = {}
     },
   },
+  review = {
+    -- Master toggle. When false the review subsystem doesn't attach any
+    -- listeners and the `:DiffviewReview*` commands are no-ops.
+    enabled = true,
+    -- If true, every `DiffviewOpen` automatically starts a review session
+    -- (falling back to copy-only when no PR is detected). When false the
+    -- user must run `:DiffviewReviewStart` explicitly.
+    auto_attach = false,
+    -- "float" places the comment editor as a floating window anchored
+    -- just below the commented line. "split" opens a horizontal split
+    -- below the diff window (less polished, full-vim-motions guaranteed).
+    editor_style = "float",
+    -- Maximum height (lines) of the auto-resizing comment editor.
+    max_editor_height = 12,
+    -- Where to keep per-PR draft JSON. `nil` resolves to
+    -- `stdpath('data') .. '/diffview/reviews'` at runtime.
+    persistence_dir = nil,
+    -- Border for all review floating windows.
+    border = "rounded",
+    -- Status-bar template tokens: %s = id ("#42" or "(copy-only)"),
+    -- %d = comments count, %d = files reviewed, %d = total files.
+    status_template = "  Review %s  │ %d comments │ %d/%d reviewed",
+    -- Highlight namespace prefix for comment markers (mostly internal).
+    sign_text = "C",
+  },
   default_args = {
     DiffviewOpen = {},
     DiffviewFileHistory = {},
@@ -143,6 +169,11 @@ M.defaults = {
       { "n", "<leader>cT",  actions.conflict_choose_all("theirs"),  { desc = "Choose the THEIRS version of a conflict for the whole file" } },
       { "n", "<leader>cB",  actions.conflict_choose_all("base"),    { desc = "Choose the BASE version of a conflict for the whole file" } },
       { "n", "<leader>cA",  actions.conflict_choose_all("all"),     { desc = "Choose all the versions of a conflict for the whole file" } },
+      { { "n", "x" }, "<leader>jc", review_actions.comment_line,        { desc = "Review: add a comment on the current line / range" } },
+      { "n",          "<leader>jC", review_actions.comment_file,        { desc = "Review: add a file-level comment on the current file" } },
+      { "n",          "<leader>jl", review_actions.list_comments,       { desc = "Review: open the pending comments list" } },
+      { "n",          "<leader>js", review_actions.submit_review,       { desc = "Review: open the submit form" } },
+      { "n",          "<leader>jy", review_actions.copy_review,         { desc = "Review: yank the review to clipboard" } },
       { "n", "dX",          actions.conflict_choose_all("none"),    { desc = "Delete the conflict region for the whole file" } },
       unpack(actions.compat.fold_cmds),
     },
@@ -211,6 +242,12 @@ M.defaults = {
       { "n", "<leader>cB",     actions.conflict_choose_all("base"),    { desc = "Choose the BASE version of a conflict for the whole file" } },
       { "n", "<leader>cA",     actions.conflict_choose_all("all"),     { desc = "Choose all the versions of a conflict for the whole file" } },
       { "n", "dX",             actions.conflict_choose_all("none"),    { desc = "Delete the conflict region for the whole file" } },
+      { "n", "c",              review_actions.comment_line,            { desc = "Review: comment on the file under the cursor (line subject)" } },
+      { "n", "C",              review_actions.comment_file,            { desc = "Review: comment on the file under the cursor (file subject)" } },
+      { "n", "<leader>jR",     review_actions.toggle_reviewed,         { desc = "Review: toggle the reviewed checkbox on this file" } },
+      { "n", "<leader>jl",     review_actions.list_comments,           { desc = "Review: open the pending comments list" } },
+      { "n", "<leader>js",     review_actions.submit_review,           { desc = "Review: open the submit form" } },
+      { "n", "<leader>jy",     review_actions.copy_review,             { desc = "Review: yank the review to clipboard" } },
     },
     file_history_panel = {
       { "n", "g!",            actions.options,                     { desc = "Open the option panel" } },
@@ -254,6 +291,17 @@ M.defaults = {
     help_panel = {
       { "n", "q",     actions.close,  { desc = "Close help menu" } },
       { "n", "<esc>", actions.close,  { desc = "Close help menu" } },
+    },
+    review = {
+      -- Bindings applied to the floating comment-editor scratch buffer
+      -- (only while it's open). The main user-facing review bindings
+      -- live in `keymaps.view` and `keymaps.file_panel` above so they
+      -- work from wherever the cursor is.
+      { "n", "<C-s>", review_actions.editor_save,    { desc = "Save the comment and close the editor" } },
+      { "i", "<C-s>", review_actions.editor_save,    { desc = "Save the comment and close the editor" } },
+      { "n", "q",     review_actions.editor_cancel,  { desc = "Discard the comment and close the editor" } },
+      { "n", "<C-c>", review_actions.editor_cancel,  { desc = "Discard the comment and close the editor" } },
+      { "i", "<C-c>", review_actions.editor_cancel,  { desc = "Discard the comment and close the editor" } },
     },
   },
 }
@@ -657,6 +705,10 @@ function M.setup(user_config)
         end
       end
     end
+  end
+
+  if M._config.review and M._config.review.enabled then
+    require("diffview.review").setup()
   end
 
   setup_done = true

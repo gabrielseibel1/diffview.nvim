@@ -1,5 +1,24 @@
 # Diffview.nvim
 
+> [!NOTE]
+> **This is a fork.** It adds a tuicr-style **PR review-sessions** feature
+> on top of upstream `sindrets/diffview.nvim`:
+>
+> - Build up inline line / line-range / file-level comments locally as you
+>   walk the diff
+> - Reviewed checkbox + status bar on the file panel (files reviewed / total,
+>   comment count)
+> - Floating dialogs for the comment list, submit form, and clipboard yank
+> - Submit a single GitHub Pull-Request review (`APPROVE` / `COMMENT` /
+>   `REQUEST_CHANGES`) via the `gh` CLI — works on `github.com` and
+>   `github.tools.sap` (and any other `gh`-supported host)
+> - Drafts are debounce-persisted per-PR to disk; reload them on next open
+> - Or just yank the whole review as markdown for pasting into an LLM
+>
+> **Docs:** [`doc/REVIEW.md`](doc/REVIEW.md)
+> **Pending polish:** [`TODO-review.md`](TODO-review.md)
+> **Quick start:** `:DiffviewOpen origin/main...HEAD --imply-local` then `:DiffviewReviewStart`
+
 Single tabpage interface for easily cycling through diffs for all modified files
 for any git rev.
 
