@@ -15,6 +15,7 @@ local format = lazy.require("diffview.review.format") ---@module "diffview.revie
 local github = lazy.require("diffview.review.github") ---@module "diffview.review.github"
 local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
 local logger = lazy.access(_G, { "DiffviewGlobal", "logger" }) ---@type Logger
+local markers = lazy.require("diffview.review.markers") ---@module "diffview.review.markers"
 local review = lazy.require("diffview.review") ---@module "diffview.review"
 local submit_form = lazy.require("diffview.review.ui.submit_form") ---@module "diffview.review.ui.submit_form"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
@@ -279,6 +280,94 @@ function M.toggle_reviewed()
     view.panel:redraw()
     review.refresh_statusbar(view)
   end
+end
+
+-- ───── edit / delete the comment under the cursor ────────────────────
+
+---Resolve the comment the user means to edit / delete. The cursor must
+---be on a code line in a diff window that has a comment anchored on or
+---covering that line (i.e. the line shows the `C` sign, or sits inside
+---a multi-line range). When several comments share the same line,
+---prompt with vim.ui.select.
+---
+---File-level comments are reachable from line 1 of the diff buffer.
+---
+---@param k_after fun(session: ReviewSession, comment: ReviewComment): nil
+---  Invoked once the comment is resolved. Async because of the picker.
+local function with_comment_under_cursor(k_after)
+  local view, session = current()
+  if not view or not session then
+    utils.err("[review] no active review session")
+    return
+  end
+  local winid = api.nvim_get_current_win()
+  local side = markers.side_for_win(view, winid)
+  if not side then
+    utils.err("[review] cursor is not in a diff window — move into the LEFT or RIGHT pane")
+    return
+  end
+  local bufnr = api.nvim_win_get_buf(winid)
+  local line = api.nvim_win_get_cursor(winid)[1]
+  local cs = markers.comments_at_line(session, bufnr, side, line)
+  if #cs == 0 then
+    utils.err("[review] no comment on this line — use <leader>jl to jump from the comment list")
+    return
+  end
+
+  if #cs == 1 then
+    k_after(session, cs[1])
+    return
+  end
+
+  -- Multiple comments on the same line: pick one.
+  local labels = {}
+  for _, c in ipairs(cs) do
+    local body = (c.body or ""):gsub("\n.*$", "")
+    if #body > 60 then body = body:sub(1, 59) .. "…" end
+    local span = c.subject == "file"
+      and "[FILE]"
+      or (c.start_line and ("L%d-L%d"):format(c.start_line, c.line) or ("L%d"):format(c.line))
+    table.insert(labels, ("%s (%s): %s"):format(span, c.side or "?", body))
+  end
+  vim.ui.select(cs, {
+    prompt = "Multiple comments on this line — pick one:",
+    format_item = function(c)
+      for i, cc in ipairs(cs) do if cc == c then return labels[i] end end
+      return c.id
+    end,
+  }, function(choice)
+    if choice then k_after(session, choice) end
+  end)
+end
+
+---Open the editor on the comment under the cursor (code line or float).
+function M.edit_comment_at_cursor()
+  with_comment_under_cursor(function(session, c)
+    local loc = {
+      path = c.path, side = c.side, line = c.line,
+      start_line = c.start_line, subject = c.subject,
+    }
+    comment_editor.open(session, loc, { existing_comment = c })
+  end)
+end
+
+---Delete the comment under the cursor (code line or float). No prompt —
+---calling the action is already an intentional act.
+function M.delete_comment_at_cursor()
+  with_comment_under_cursor(function(session, c)
+    session:delete_comment(c.id)
+    logger:lvl(5):debug(("[review] deleted comment %s"):format(c.id))
+    local view = session.view
+    if view then
+      markers.redraw_for_view(view, session)
+      if view.panel and view.panel.is_open and view.panel:is_open() then
+        view.panel:render()
+        view.panel:redraw()
+        review.refresh_statusbar(view)
+      end
+    end
+    utils.info("[review] comment deleted")
+  end)
 end
 
 -- ───── list / submit / copy ───────────────────────────────────────────

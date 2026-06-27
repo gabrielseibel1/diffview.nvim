@@ -3,16 +3,19 @@
 --- Renders one row per pending comment in the active session. Each row is:
 ---   <path>:L<line>(<side>)  <body excerpt>
 ---
+--- This is a jump-only picker — editing and deleting comments now lives
+--- on `<leader>je` / `<leader>jd` in the diff itself (where the cursor
+--- can land inside the rendered comment float). Keeping the list lean
+--- means the only decision the user makes here is "which comment to go
+--- to".
+---
 --- Keybindings (buffer-local):
 ---   <CR>      jump to the file+line in the host DiffView
----   d         delete the comment under the cursor
----   e         re-open the editor on the comment under the cursor
 ---   q, <esc>  close the list
 
 local lazy = require("diffview.lazy")
 
 local config = lazy.require("diffview.config") ---@module "diffview.config"
-local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local api = vim.api
 local M = {}
@@ -71,7 +74,7 @@ local function render(st)
       table.insert(st.ids, c.id)
     end
     table.insert(lines, "")
-    table.insert(lines, "  <CR> jump   e edit   d delete   q close")
+    table.insert(lines, "  <CR> jump   q close   (edit/delete: <leader>je / <leader>jd in the diff)")
   end
   api.nvim_buf_set_lines(st.buf, 0, -1, false, lines)
   vim.bo[st.buf].modifiable = false
@@ -136,28 +139,6 @@ function M.open(session)
       end)
     end
   end, "Jump to the comment")
-  map("d", function()
-    local id = id_at_cursor(st); if not id then return end
-    session:delete_comment(id)
-    render(st)
-    local review = require("diffview.review")
-    if session.view then
-      review.refresh_statusbar(session.view)
-      review.markers.redraw_for_view(session.view, session)
-    end
-    utils.info("[review] comment deleted")
-  end, "Delete the comment")
-  map("e", function()
-    local id = id_at_cursor(st); if not id then return end
-    local c = session:get_comment(id)
-    if not c then return end
-    close()
-    local loc = {
-      path = c.path, side = c.side, line = c.line,
-      start_line = c.start_line, subject = c.subject,
-    }
-    require("diffview.review.ui.comment_editor").open(session, loc, { existing_comment = c })
-  end, "Edit the comment")
 end
 
 return M
